@@ -138,6 +138,11 @@ function create-mono {
 	rm -rf .git/refs/tags
 	mv .git/refs/namespaced-tags .git/refs/tags
 
+	# Rewrite annotated tags
+	git for-each-ref refs/tags/ --format '%(objecttype) %(refname:short)' | while read ty tag_name; do
+		[ $ty = tag ] && GIT_EDITOR=true git tag $tag_name $tag_name -f -a
+	done
+
 	git checkout -q master
 	git checkout -q .
 }
