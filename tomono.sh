@@ -21,6 +21,9 @@ fi
 # Default name of the mono repository (override with envvar)
 : "${MONOREPO_NAME=core}"
 
+# Default name of the main branch (override with envvar)
+: "${MAIN_BRANCH=master}"
+
 # Monorepo directory
 monorepo_dir="$PWD/$MONOREPO_NAME"
 
@@ -70,9 +73,9 @@ function remote-branches {
 # 2. The name of the target directory in the core repository
 function create-mono {
 	# Pretty risky, check double-check!
-	if [[ "${1:-}" == "--continue" ]]; then
+	if [[ ("${1:-}" == "--continue") || ("${1:-}" == "--maintain") || ("${1:-}" == "--just-remotes") ]]; then
 		if [[ ! -d "$MONOREPO_NAME" ]]; then
-			echo "--continue specified, but nothing to resume" >&2
+			echo "Continuation specified, but nothing to resume" >&2
 			exit 1
 		fi
 		pushd "$MONOREPO_NAME"
@@ -104,7 +107,11 @@ function create-mono {
                 fi
 
 		echo "Merging in $repo.." >&2
-		git remote add "$name" "$repo"
+		git remote add "$name" "$repo" || echo "Remote $name already exists"
+		if [[ "${1:-}" == "--just-remotes" ]]; then
+			continue
+		fi
+
 		echo "Fetching $name.." >&2 
 		git fetch -q "$name"
 
@@ -128,6 +135,20 @@ function create-mono {
 				git rm -rfq --ignore-unmatch .
 				git commit -q --allow-empty -m "Root commit for $branch branch"
 			fi
+
+			if [[ -d "$folder" ]]; then
+				if [[ "${1:-}" == "--continue" ]]; then
+					echo "--continue specified, $folder already exists, skipping"
+					continue
+				fi
+
+				if [[ "${1:-}" == "--maintain" ]]; then
+					echo "--maintain specified, $folder already exists, merging using subtree"
+					git merge --strategy recursive --strategy-option subtree="$folder/" "$name/$branch"
+					continue
+				fi
+			fi
+
 			git merge -q --no-commit -s ours "$name/$branch" --allow-unrelated-histories
 			git read-tree --prefix="$folder/" "$name/$branch"
 			git commit -q --no-verify --allow-empty -m "Merging $name to $branch"
@@ -138,7 +159,7 @@ function create-mono {
 	rm -rf .git/refs/tags
 	mv .git/refs/namespaced-tags .git/refs/tags
 
-	git checkout -q master
+	git checkout -q $MAIN_BRANCH
 	git checkout -q .
 }
 
